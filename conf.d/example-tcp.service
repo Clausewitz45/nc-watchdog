@@ -1,0 +1,10 @@
+name="example-tcp-service"
+description="an example optional description"
+check_type=tcp
+check_address=example.example.com
+check_port=25
+check_period=600
+restart_action="/etc/init.d/service restart"
+restart_number=5
+restart_interval=120
+notification=email@example.com

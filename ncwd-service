@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 ################################################################################
 #title           :nordcloud-watchdog
 #description     :Custom watchdog functionality implemented for Nordcloud
@@ -12,19 +13,6 @@
 ################################################################################
 
 ################################################################################
-# Static variables
-################################################################################
-
-# Config file location
-configFile="./ncwd.conf"
-
-# Colors
-RED="\e[31m"
-GREEN="\e[32m"
-YELLOW="\e[33m"
-WHITE="\e[39m"
-
-################################################################################
 # Default Configuration
 ################################################################################
 
@@ -33,12 +21,15 @@ daemonName="nordcloud-watchdog"
 
 # PID settings
 pidDir="./pid"
-pidFile="$daemonName.pid"
+pidFile="${pidDir}/${daemonName}.pid"
 
 # LOG settings
 logDir="./log"
-logFile="$logDir/$daemonName-"`date +"%Y-%m-%d"`".log"
+logFile="${logDir}/${daemonName}-"$(date +'%Y-%m-%d')".log"
 logMaxSize=1024       # In Kbytes
+
+# TMP settings
+tmpDir="./tmp"
 
 # Config directory settings for services
 configDir="./conf.d"
@@ -46,18 +37,40 @@ configDir="./conf.d"
 # Daemon running interval
 runInterval=60        # In seconds
 
-# Reading config from file to overwrite defaults
-source ${configFile}
+################################################################################
+# Static variables
+################################################################################
+
+# Config file location
+configFile="./ncwd.conf"
+
+# Scheduler location
+schedulerDir="./lib"
+schedulerFile="./lib/scheduler.sh"
+
+# DOCS location
+docsDir="./docs"
+
+# Colors
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+WHITE="\e[39m"
 
 ################################################################################
 # Do not edit below
 ################################################################################
 
-myPid=`echo $$`
+# Reading config from file to overwrite defaults
+source ${configFile}
+
+# Reading scheduler and other functions
+source ${schedulerFile}
+
+myPid=$(echo $$)
 
 doCommands() {
-  # This is where you put all the commands for the daemon.
-  echo "Running commands."
+  scheduler
 }
 
 setupDaemon() {
@@ -81,18 +94,28 @@ setupDaemon() {
       touch "${logFile}"
     fi
   fi
+
+  # Checking for valid configuration only
+  if [[ $(configCheck) -eq 1 ]]; then
+    echo -e "\n${RED}Configuration error${WHITE}: please check service configurations.\n"
+    exit 1
+  fi
+
+  # Create running config to the tmp folder from the conf.d service files
+  initConfig
+
 }
 
 startDaemon() {
   # Start the daemon.
   setupDaemon # Make sure the directories are there.
-  if [[ `checkDaemon` = 1 ]]; then
-    echo " * \033[31;5;148mError\033[39m: $daemonName is already running."
+  if [[ $(checkDaemon) -eq 1 ]]; then
+    echo -e " * ${RED}Error${WHITE}: ${daemonName} is already running."
     exit 1
   fi
-  echo " * Starting $daemonName with PID: $myPid."
-  echo "$myPid" > "$pidFile"
-  log '*** '`date +"%Y-%m-%d"`": Starting up $daemonName."
+  echo -e " * ${YELLOW}Starting${WHITE} ${daemonName} with PID: ${myPid}."
+  echo -e "${myPid}" > "${pidFile}"
+  log "*** $(date +'%Y-%m-%d'): Starting up ${daemonName}."
 
   # Start the loop.
   loop
@@ -100,33 +123,35 @@ startDaemon() {
 
 stopDaemon() {
   # Stop the daemon.
-  if [[ `checkDaemon` -eq 0 ]]; then
-    echo " * \033[31;5;148mError\033[39m: $daemonName is not running."
+  if [[ $(checkDaemon) -eq 0 ]]; then
+    echo -e " * ${RED}Error${WHITE}: ${daemonName} is not running."
     exit 1
   fi
-  echo " * Stopping $daemonName"
-  log '*** '`date +"%Y-%m-%d"`": $daemonName stopped."
+  echo -e " * ${YELLOW}Stopping ${daemonName} ${WHITE}"
+  log "*** $(date +'%Y-%m-%d'): ${daemonName} stopped."
 
-  if [[ ! -z `cat $pidFile` ]]; then
-    kill -9 `cat "$pidFile"` &> /dev/null
+  if [[ ! -z $(cat ${pidFile}) ]]; then
+    kill -9 $(cat ${pidFile}) &> /dev/null
   fi
+
+  rm -rf ${tmpDir}/* --preserve-root
 }
 
 statusDaemon() {
   # Query and return whether the daemon is running.
-  if [[ `checkDaemon` -eq 1 ]]; then
-    echo " * $daemonName is running."
+  if [[ $(checkDaemon) -eq 1 ]]; then
+    echo -e "\n ${GREEN}* ${daemonName} is running.${WHITE} \n"
   else
-    echo " * $daemonName isn't running."
+    echo -e "\n ${RED}* ${daemonName} isn't running.${WHITE} \n"
   fi
   exit 0
 }
 
 restartDaemon() {
   # Restart the daemon.
-  if [[ `checkDaemon` = 0 ]]; then
+  if [[ $(checkDaemon) -eq 0 ]]; then
     # Can't restart it if it isn't running.
-    echo "$daemonName isn't running."
+    echo -e " ${RED}${daemonName} isn't running.${WHITE}"
     exit 1
   fi
   stopDaemon
@@ -135,24 +160,21 @@ restartDaemon() {
 
 checkDaemon() {
   # Check to see if the daemon is running.
-  # This is a different function than statusDaemon
-  # so that we can use it other functions.
-  if [[ -z "$oldPid" ]]; then
+  if [[ -z "${oldPid}" ]]; then
     return 0
-  elif [[ `ps aux | grep "$oldPid" | grep -v grep` > /dev/null ]]; then
-    if [[ -f "$pidFile" ]]; then
-      if [[ `cat "$pidFile"` = "$oldPid" ]]; then
+  elif [[ $(ps aux | grep "${oldPid}" | grep -v grep) > /dev/null ]]; then
+    if [[ -f "${pidFile}" ]]; then
+      if [[ $(cat "${pidFile}") == "${oldPid}" ]]; then
         # Daemon is running.
-        # echo 1
         return 1
       else
         # Daemon isn't running.
         return 0
       fi
     fi
-  elif [[ `ps aux | grep "$daemonName" | grep -v grep | grep -v "$myPid" | grep -v "0:00.00"` > /dev/null ]]; then
+  elif [[ $(ps aux | grep "$daemonName" | grep -v grep | grep -v "$myPid" | grep -v "0:00.00") > /dev/null ]]; then
     # Daemon is running but without the correct PID. Restart it.
-    log '*** '`date +"%Y-%m-%d"`": $daemonName running with invalid PID; restarting."
+    log "*** $(date +'%Y-%m-%d'): ${daemonName} running with invalid PID; restarting."
     restartDaemon
     return 1
   else
@@ -162,12 +184,40 @@ checkDaemon() {
   return 1
 }
 
+configCheck() {
+  # TODO: I would parse the service definitions for executables, and validate
+  # them against what exists currently. If a check cannot be performed I would
+  # drop an error message (for example curl for http checks) and then exit
+  # the daemon
+  log "*** $(date +'%Y-%m-%d'): Checking config"
+}
+
+addService() {
+  # TODO: Basic READ functions whith the given parameters like:
+  # service name, service description, check type (http, pid, socket, tcp)
+  # check period (s), restart action, restart numbers, restart interval
+  # notification email
+  log "*** $(date +'%Y-%m-%d'): $1 Service added"
+}
+
+removeService() {
+  # TODO: Basic READ functions for an existing service. Delete the file from
+  # the conf.d directory after that
+  log "*** $(date +'%Y-%m-%d'): $1 Service removed"
+}
+
+usage() {
+  # TODO: cat the content of the docs.txt file in the docs folder. Second param
+  # could be a specific command, and cat the specific file from there
+  cat ${docsDir}/usage.txt
+}
+
 loop() {
   # This is the loop.
-  now=`date +%s`
+  now=$(date +%s)
 
-  if [[ -z $last ]]; then
-    last=`date +%s`
+  if [[ -z ${last} ]]; then
+    last=$(date +%s)
   fi
 
   # Do everything you need the daemon to do.
@@ -176,7 +226,7 @@ loop() {
   # Check to see how long we actually need to sleep for. If we want this to run
   # once a minute and it's taken more than a minute, then we should just run it
   # anyway.
-  last=`date +%s`
+  last=$(date +%s)
 
   # Set the sleep interval
   if [[ ! $((now-last+runInterval+1)) -lt $((runInterval)) ]]; then
@@ -187,20 +237,27 @@ loop() {
   loop
 }
 
+initConfig() {
+  # TODO: Create a config file in tmp with restructuring the service files
+  # from conf.d folder. Line by line a single service and it's full definitions
+  # this will be parsed by the scheduler
+  log "*** $(date +'%Y-%m-%d'): Initializing config"
+}
+
 log() {
   # Generic log function.
   echo "$1" >> "$logFile"
 }
 
-
 ################################################################################
-# Parse the command.
+# Main
 ################################################################################
 
-if [[ -f "$pidFile" ]]; then
-  oldPid=`cat "$pidFile"`
+if [[ -f "${pidFile}" ]]; then
+  oldPid=$(cat "${pidFile}")
 fi
 checkDaemon
+
 case "$1" in
   start)
     startDaemon
@@ -218,7 +275,7 @@ case "$1" in
     usage
     ;;
   configcheck)
-    configcheck
+    configCheck
     ;;
   add-service)
     addService

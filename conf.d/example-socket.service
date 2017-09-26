@@ -1,0 +1,9 @@
+name="example-socket-service"
+description="an example optional description"
+check_type=socket
+check_socket=/var/run/supervisor.sock
+check_period=600
+restart_action="/etc/init.d/service restart"
+restart_number=5
+restart_interval=120
+notification=email@example.com
