@@ -12,23 +12,42 @@
 ################################################################################
 
 ################################################################################
+# Static variables
+################################################################################
+
+# Config file location
+configFile="./ncwd.conf"
+
+# Colors
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+WHITE="\e[39m"
+
+################################################################################
 # Default Configuration
 ################################################################################
 
 # Daemon name
 daemonName="nordcloud-watchdog"
 
-# PID configuration
+# PID settings
 pidDir="./pid"
 pidFile="$daemonName.pid"
 
-# LOG configuration
+# LOG settings
 logDir="./log"
 logFile="$logDir/$daemonName-"`date +"%Y-%m-%d"`".log"
 logMaxSize=1024       # In Kbytes
 
+# Config directory settings for services
+configDir="./conf.d"
+
 # Daemon running interval
 runInterval=60        # In seconds
+
+# Reading config from file to overwrite defaults
+source ${configFile}
 
 ################################################################################
 # Do not edit below
@@ -43,20 +62,23 @@ doCommands() {
 
 setupDaemon() {
   # Make sure that the directories work.
-  if [[ ! -d "$pidDir" ]]; then
-    mkdir -p "$pidDir"
+  if [[ ! -d "${configDir}" ]]; then
+    mkdir -p "${configDir}"
   fi
-  if [[ ! -d "$logDir" ]]; then
-    mkdir "$logDir"
+  if [[ ! -d "${pidDir}" ]]; then
+    mkdir -p "${pidDir}"
   fi
-  if [[ ! -f "$logFile" ]]; then
-    touch "$logFile"
+  if [[ ! -d "${logDir}" ]]; then
+    mkdir "${logDir}"
+  fi
+  if [[ ! -f "${logFile}" ]]; then
+    touch "${logFile}"
   else
     # Check to see if we need to rotate the logs.
-    size=$((`ls -l "$logFile" | cut -d " " -f 8`/1024))
-    if [[ $size -gt $logMaxSize ]]; then
-      mv $logFile "$logFile.old"
-      touch "$logFile"
+    size=$((`ls -l "${logFile}" | cut -d " " -f 8`/1024))
+    if [[ ${size} -gt ${logMaxSize} ]]; then
+      mv ${logFile} "${logFile}.old"
+      touch "${logFile}"
     fi
   fi
 }
@@ -192,8 +214,20 @@ case "$1" in
   restart)
     restartDaemon
     ;;
+  usage)
+    usage
+    ;;
+  configcheck)
+    configcheck
+    ;;
+  add-service)
+    addService
+    ;;
+  remove-service)
+    removeService
+    ;;
   *)
-  echo "\033[31;5;148mError\033[39m: usage $0 { start | stop | restart | status }"
+  echo -e "\n${RED}Error${WHITE}: usage $0 { start | stop | restart | status | configcheck | add-service | remove-service | usage }\n"
   exit 1
 esac
 
