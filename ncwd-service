@@ -1,46 +1,55 @@
-#!/bin/sh
+#!/bin/bash
+################################################################################
+#title           :nordcloud-watchdog
+#description     :Custom watchdog functionality implemented for Nordcloud
+#author		       :Csaba SARI <scsaba314@gmail.com>
+#date            :20170925
+#version         :0.1
+#usage		       :nordcloud-watchdog
+#notes           :Install Vim and Emacs to use this script.
+#source          :Taken from https://gist.github.com/shawnrice/11076762
+#bash_version    :4.3-14ubuntu1.2
+################################################################################
 
-# This is a skeleton of a bash daemon. To use for yourself, just set the
-# daemonName variable and then enter in the commands to run in the doCommands
-# function. Modify the variables just below to fit your preference.
+################################################################################
+# Default Configuration
+################################################################################
 
-daemonName="DAEMON-NAME"
+# Daemon name
+daemonName="nordcloud-watchdog"
 
-pidDir="."
-pidFile="$pidDir/$daemonName.pid"
+# PID configuration
+pidDir="./pid"
 pidFile="$daemonName.pid"
 
-logDir="."
-# To use a dated log file.
-# logFile="$logDir/$daemonName-"`date +"%Y-%m-%d"`".log"
-# To use a regular log file.
-logFile="$logDir/$daemonName.log"
+# LOG configuration
+logDir="./log"
+logFile="$logDir/$daemonName-"`date +"%Y-%m-%d"`".log"
+logMaxSize=1024       # In Kbytes
 
-# Log maxsize in KB
-logMaxSize=1024   # 1mb
+# Daemon running interval
+runInterval=60        # In seconds
 
-runInterval=60 # In seconds
+################################################################################
+# Do not edit below
+################################################################################
+
+myPid=`echo $$`
 
 doCommands() {
   # This is where you put all the commands for the daemon.
   echo "Running commands."
 }
 
-################################################################################
-# Below is the skeleton functionality of the daemon.
-################################################################################
-
-myPid=`echo $$`
-
 setupDaemon() {
   # Make sure that the directories work.
-  if [ ! -d "$pidDir" ]; then
-    mkdir "$pidDir"
+  if [[ ! -d "$pidDir" ]]; then
+    mkdir -p "$pidDir"
   fi
-  if [ ! -d "$logDir" ]; then
+  if [[ ! -d "$logDir" ]]; then
     mkdir "$logDir"
   fi
-  if [ ! -f "$logFile" ]; then
+  if [[ ! -f "$logFile" ]]; then
     touch "$logFile"
   else
     # Check to see if we need to rotate the logs.
@@ -106,10 +115,10 @@ checkDaemon() {
   # Check to see if the daemon is running.
   # This is a different function than statusDaemon
   # so that we can use it other functions.
-  if [ -z "$oldPid" ]; then
+  if [[ -z "$oldPid" ]]; then
     return 0
   elif [[ `ps aux | grep "$oldPid" | grep -v grep` > /dev/null ]]; then
-    if [ -f "$pidFile" ]; then
+    if [[ -f "$pidFile" ]]; then
       if [[ `cat "$pidFile"` = "$oldPid" ]]; then
         # Daemon is running.
         # echo 1
@@ -135,7 +144,7 @@ loop() {
   # This is the loop.
   now=`date +%s`
 
-  if [ -z $last ]; then
+  if [[ -z $last ]]; then
     last=`date +%s`
   fi
 
@@ -166,7 +175,7 @@ log() {
 # Parse the command.
 ################################################################################
 
-if [ -f "$pidFile" ]; then
+if [[ -f "$pidFile" ]]; then
   oldPid=`cat "$pidFile"`
 fi
 checkDaemon
